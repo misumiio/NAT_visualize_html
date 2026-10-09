@@ -1,0 +1,1189 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NAT 四种类型可视化说明</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --panel: #161b22;
+    --panel2: #1c2330;
+    --border: #30363d;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --inner: #2ea043;
+    --inner-bg: rgba(46,160,67,.12);
+    --outer: #58a6ff;
+    --outer-bg: rgba(88,166,255,.12);
+    --nat: #d29922;
+    --nat-bg: rgba(210,153,34,.12);
+    --ok: #3fb950;
+    --no: #f85149;
+    --accent: #a371f7;
+    --arrow: #7d8590;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0;
+    background: radial-gradient(1200px 600px at 70% -10%, #17233a 0%, var(--bg) 55%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC",
+                 "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    line-height: 1.65;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--outer); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+
+  header {
+    padding: 56px 24px 32px;
+    text-align: center;
+    max-width: 1100px;
+    margin: 0 auto;
+  }
+  header h1 {
+    font-size: clamp(26px, 4vw, 42px);
+    margin: 0 0 12px;
+    letter-spacing: .5px;
+    background: linear-gradient(90deg, #58a6ff, #a371f7 60%, #3fb950);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  header p.sub { color: var(--muted); margin: 0 auto; max-width: 720px; font-size: 16px; }
+
+  .wrap { max-width: 1100px; margin: 0 auto; padding: 0 24px 80px; }
+
+  /* 导航 */
+  nav.tabs {
+    position: sticky; top: 0; z-index: 20;
+    display: flex; flex-wrap: wrap; gap: 8px; justify-content: center;
+    padding: 12px; margin-bottom: 28px;
+    background: rgba(13,17,23,.82);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--border);
+  }
+  nav.tabs button {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    color: var(--muted);
+    padding: 8px 16px;
+    border-radius: 999px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: .2s;
+  }
+  nav.tabs button:hover { color: var(--text); border-color: var(--muted); }
+  nav.tabs button.active {
+    color: #fff;
+    background: linear-gradient(135deg, #1f6feb, #8957e5);
+    border-color: transparent;
+    box-shadow: 0 0 0 1px rgba(255,255,255,.08), 0 6px 18px -8px #1f6feb;
+  }
+
+  /* 介绍卡 */
+  .intro {
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px 24px;
+    margin-bottom: 32px;
+    color: #c9d1d9;
+  }
+  .intro h2 { margin: 0 0 8px; font-size: 18px; color: var(--text); }
+  .intro code {
+    background: #0b1020; padding: 2px 6px; border-radius: 5px;
+    color: #79c0ff; font-size: 13px;
+  }
+
+  /* NAT 卡片 */
+  .nat-card {
+    display: none;
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    overflow: hidden;
+    animation: fade .35s ease;
+  }
+  .nat-card.show { display: block; }
+  @keyframes fade { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
+
+  .nat-head {
+    display: flex; align-items: center; gap: 16px; flex-wrap: wrap;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--border);
+    background: linear-gradient(90deg, rgba(88,166,255,.08), transparent);
+  }
+  .badge {
+    width: 44px; height: 44px; flex: none;
+    display: grid; place-items: center;
+    border-radius: 12px; font-weight: 700; font-size: 18px;
+    background: var(--nat-bg); color: var(--nat);
+    border: 1px solid rgba(210,153,34,.35);
+  }
+  .nat-head h3 { margin: 0; font-size: 20px; }
+  .nat-head .en { color: var(--muted); font-size: 13px; font-weight: 400; display: block; }
+  .sec-tag {
+    margin-left: auto; font-size: 12px; color: var(--muted);
+    border: 1px dashed var(--border); padding: 4px 10px; border-radius: 999px;
+  }
+
+  /* 拓扑图 */
+  /* ---- 数据包飞行动画 ---- */
+  .flywrap {
+    position: absolute; inset: 0;
+    pointer-events: none; overflow: hidden;
+    border-radius: 16px;
+  }
+  .packet {
+    position: absolute;
+    min-width: 30px; height: 26px;
+    padding: 0 8px;
+    display: grid; place-items: center;
+    border-radius: 8px;
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 11px; font-weight: 700;
+    color: #04121f;
+    background: linear-gradient(135deg, #58a6ff, #a5d6ff);
+    box-shadow: 0 0 0 2px rgba(13,17,23,.9), 0 6px 22px -4px #58a6ff;
+    white-space: nowrap;
+    z-index: 30;
+  }
+  .packet.in  { background: linear-gradient(135deg,#2ea043,#7ee787); box-shadow: 0 0 0 2px rgba(13,17,23,.9), 0 6px 22px -4px #2ea043; }
+  .packet.pub { background: linear-gradient(135deg,#d29922,#f2cc60); box-shadow: 0 0 0 2px rgba(13,17,23,.9), 0 6px 22px -4px #d29922; }
+  .packet.drop { background: linear-gradient(135deg,#f85149,#ff9492); box-shadow: 0 0 0 2px rgba(13,17,23,.9), 0 6px 22px -4px #f85149; }
+  .nat-box .router.working {
+    box-shadow: 0 0 0 2px #d29922, 0 0 34px -2px #d29922;
+    transform: scale(1.06);
+    transition: .2s;
+  }
+  .ripple {
+    position: absolute; width: 60px; height: 60px; border-radius: 50%;
+    border: 2px solid currentColor; opacity: .8;
+    transform: translate(-50%,-50%) scale(.3);
+    animation: ripple .6s ease-out forwards; z-index: 25;
+  }
+  @keyframes ripple { to { transform: translate(-50%,-50%) scale(1.8); opacity: 0; } }
+  .poof {
+    position: absolute; transform: translate(-50%,-50%);
+    font-size: 22px; color: var(--no); font-weight: 700;
+    animation: poof .8s ease-out forwards; z-index: 26;
+  }
+  @keyframes poof { 0%{opacity:1; transform:translate(-50%,-50%) scale(.6);} 100%{opacity:0; transform:translate(-50%,-50%) scale(1.6);} }
+
+  .stage {
+    position: relative;
+    padding: 28px 24px;
+    background:
+      linear-gradient(rgba(88,166,255,.03), rgba(163,113,247,.03)),
+      repeating-linear-gradient(0deg, transparent 0 39px, rgba(255,255,255,.025) 39px 40px),
+      repeating-linear-gradient(90deg, transparent 0 39px, rgba(255,255,255,.025) 39px 40px);
+    min-height: 430px;
+    isolation: isolate;
+  }
+  .stage .topo, .stage .maptable { position: relative; z-index: 2; }
+  .topo {
+    display: grid;
+    grid-template-columns: 1fr 120px 1fr;
+    gap: 0;
+    align-items: center;
+    max-width: 940px;
+    margin: 0 auto;
+    position: relative;
+  }
+  .zone-title {
+    font-size: 12px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--muted); text-align: center; margin-bottom: 10px;
+  }
+  .col { padding: 6px; }
+  .col.inner .zone-title { color: var(--inner); }
+  .col.outer .zone-title { color: var(--outer); }
+
+  .node {
+    background: var(--panel2);
+    border-radius: 12px;
+    padding: 12px 14px;
+    margin: 10px 0;
+    border: 1px solid var(--border);
+    position: relative;
+    transition: .25s;
+  }
+  .node .name { font-size: 14px; font-weight: 600; }
+  .node .addr {
+    font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12px; color: var(--muted); margin-top: 3px;
+  }
+  .col.inner .node { border-left: 3px solid var(--inner); background: var(--inner-bg); }
+  .col.outer .node { border-right: 3px solid var(--outer); background: var(--outer-bg); }
+
+  .node .tagline {
+    position: absolute; top: -9px; right: 10px;
+    font-size: 10px; padding: 1px 7px; border-radius: 999px;
+    background: var(--panel2); border: 1px solid var(--border); color: var(--muted);
+  }
+
+  .nat-box {
+    grid-column: 2;
+    text-align: center;
+    padding: 10px 0;
+    position: relative;
+  }
+  .nat-box .router {
+    display: inline-grid; place-items: center;
+    width: 92px; height: 92px; margin: 0 auto;
+    border-radius: 18px;
+    border: 1px solid rgba(210,153,34,.5);
+    background: radial-gradient(circle at 30% 25%, rgba(210,153,34,.3), var(--nat-bg));
+    color: var(--nat);
+    box-shadow: 0 0 30px -8px var(--nat);
+    font-weight: 700;
+  }
+  .nat-box .router small { display:block; font-weight: 400; font-size: 10px; color: var(--muted); }
+
+  /* 映射表 */
+  .maptable {
+    max-width: 940px; margin: 22px auto 0;
+    background: #0b1020;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  .maptable .cap {
+    padding: 8px 14px; font-size: 12px; color: var(--muted);
+    border-bottom: 1px solid var(--border);
+    background: rgba(255,255,255,.02);
+    letter-spacing: 1px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { padding: 8px 12px; text-align: left; }
+  th { color: var(--muted); font-weight: 500; font-size: 12px; border-bottom: 1px solid var(--border); }
+  td { font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace; color: #c9d1d9; }
+  tr + tr td { border-top: 1px solid rgba(48,54,61,.5); }
+  td.pub { color: var(--nat); }
+  td.in { color: var(--inner); }
+  td.out { color: var(--outer); }
+  tr.row-anim { animation: rowflash 1.6s ease; }
+  @keyframes rowflash {
+    0% { background: rgba(210,153,34,.35); }
+    100% { background: transparent; }
+  }
+
+  /* 规则 / 判定 */
+  .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; padding: 4px 24px 24px; }
+  @media (max-width: 760px) { .panels { grid-template-columns: 1fr; } }
+  .pbox {
+    background: var(--panel2); border: 1px solid var(--border);
+    border-radius: 12px; padding: 16px 18px;
+  }
+  .pbox h4 { margin: 0 0 10px; font-size: 14px; color: var(--text); display:flex; align-items:center; gap:8px;}
+  .pbox h4::before { content:""; width:4px; height:16px; border-radius:2px; background: var(--accent); }
+  .pbox ul { margin: 0; padding-left: 20px; color: #c9d1d9; font-size: 14px; }
+  .pbox li { margin: 6px 0; }
+  .pbox li b { color: var(--nat); }
+  .pbox .k { color: var(--outer); font-family: ui-monospace, monospace; }
+
+  /* 交互区 */
+  .lab {
+    max-width: 940px; margin: 0 auto;
+    padding: 20px 24px 28px;
+  }
+  .lab-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+  .lab-head h4 { margin: 0; font-size: 15px; }
+  .hint { color: var(--muted); font-size: 13px; }
+
+  .controls { display: flex; gap: 10px; flex-wrap: wrap; }
+  button.btn {
+    border: 1px solid var(--border); background: var(--panel2); color: var(--text);
+    padding: 9px 16px; border-radius: 9px; cursor: pointer; font-size: 13.5px;
+    transition: .18s;
+  }
+  button.btn:hover:not(:disabled) { border-color: var(--outer); color: #fff; transform: translateY(-1px); }
+  button.btn:disabled { opacity: .35; cursor: not-allowed; }
+  button.btn.primary { background: linear-gradient(135deg,#1f6feb,#8957e5); border-color: transparent; color:#fff; }
+  button.btn.ghost { background: transparent; }
+
+  .log {
+    margin-top: 14px;
+    background: #0b1020; border: 1px solid var(--border); border-radius: 10px;
+    min-height: 118px; max-height: 190px; overflow-y: auto;
+    padding: 12px 14px; font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    font-size: 12.5px; line-height: 1.7;
+  }
+  .log div { opacity: 0; animation: logIn .25s forwards; }
+  @keyframes logIn { to { opacity: 1; } }
+  .log .l-send { color: #79c0ff; }
+  .log .l-ok { color: var(--ok); }
+  .log .l-no { color: var(--no); }
+  .log .l-nat { color: var(--nat); }
+  .log .l-dim { color: var(--muted); }
+
+  /* 穿透矩阵 */
+  .matrix-wrap {
+    max-width: 1100px; margin: 48px auto 0;
+    background: var(--panel); border: 1px solid var(--border); border-radius: 16px;
+    padding: 24px; overflow-x: auto;
+  }
+  .matrix-wrap h2 { margin: 0 0 6px; font-size: 20px; }
+  .matrix-wrap p.desc { color: var(--muted); margin: 0 0 18px; font-size: 14px; }
+  table.matrix { border-collapse: separate; border-spacing: 6px; min-width: 560px; }
+  table.matrix th {
+    border: none; font-size: 12px; color: var(--muted); text-align: center; padding: 6px 4px;
+  }
+  table.matrix td {
+    text-align: center; border-radius: 10px; padding: 0; font-family: inherit;
+  }
+  .cell {
+    width: 100%; min-width: 92px; padding: 14px 6px; border-radius: 10px;
+    font-size: 13px; font-weight: 600; cursor: default; transition: .18s;
+  }
+  .cell.yes { background: rgba(63,185,80,.16); color: var(--ok); border: 1px solid rgba(63,185,80,.4); }
+  .cell.no  { background: rgba(248,81,73,.14); color: var(--no); border: 1px solid rgba(248,81,73,.4); }
+  .cell.self { background: rgba(163,113,247,.12); color: var(--accent); border: 1px dashed rgba(163,113,247,.45); }
+  .cell:hover { transform: scale(1.04); }
+  .cell small { display: block; font-weight: 400; font-size: 10px; color: var(--muted); margin-top: 2px; }
+
+  .legend { display: flex; gap: 18px; flex-wrap: wrap; margin-top: 16px; font-size: 13px; color: var(--muted); }
+  .legend span { display: inline-flex; align-items: center; gap: 7px; }
+  .dot { width: 11px; height: 11px; border-radius: 3px; display: inline-block; }
+  .dot.yes { background: rgba(63,185,80,.5); border: 1px solid var(--ok); }
+  .dot.no  { background: rgba(248,81,73,.45); border: 1px solid var(--no); }
+
+  /* 序号相加规则 */
+  .rulebar {
+    max-width: 1100px; margin: 22px auto 0;
+    background: linear-gradient(135deg, rgba(31,111,235,.12), rgba(137,87,229,.12));
+    border: 1px solid var(--border); border-radius: 14px; padding: 18px 22px;
+    font-size: 14px;
+  }
+  .rulebar b { color: #fff; }
+  .seq { display: inline-flex; gap: 6px; margin: 8px 0 4px; flex-wrap: wrap; }
+  .seq i {
+    font-style: normal; font-family: ui-monospace, monospace;
+    background: #0b1020; border: 1px solid var(--border);
+    padding: 3px 9px; border-radius: 7px; font-size: 12.5px;
+  }
+  .seq i b { color: var(--nat); }
+
+  footer { text-align: center; color: var(--muted); font-size: 12.5px; padding: 40px 24px 60px; }
+  footer a { color: var(--muted); }
+
+  @media (max-width: 700px) {
+    .topo { grid-template-columns: 1fr; }
+    .nat-box { padding: 18px 0; }
+    .stage { min-height: auto; }
+    .nat-head .sec-tag { margin-left: 0; }
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>NAT 四种类型可视化</h1>
+  <p class="sub">全锥型 / IP 受限锥型 / 端口受限锥型 / 对称型 —— 原理、映射规则与 UDP 打洞穿透关系</p>
+</header>
+
+<div class="wrap">
+
+  <div class="intro">
+    <h2>NAT 工作原理</h2>
+    NAT 缓解了 IPv4 地址不够用的问题，同时也带来了限制：<b>NAT 外部的主机无法主动跟位于 NAT 内部的主机通信</b>。
+    NAT 内部主机想要通信，必须主动和公网的一个 IP 通信，路由器负责建立一条映射关系（<code>内网 IP:Port ⇄ 公网 IP:Port</code>），从而实现数据转发 —— 这就是 NAT 的核心工作原理。
+    不同的映射与过滤规则，造就了下面四种类型。
+  </div>
+
+  <nav class="tabs" id="tabs">
+    <button data-t="0" class="active">① 全锥型 Full Cone</button>
+    <button data-t="1">② IP 受限 Restricted Cone</button>
+    <button data-t="2">③ 端口受限 Port Restricted</button>
+    <button data-t="3">④ 对称型 Symmetric</button>
+  </nav>
+
+  <!-- ============ 卡片 1 ============ -->
+  <section class="nat-card show" data-card="0">
+    <div class="nat-head">
+      <div class="badge">①</div>
+      <div>
+        <h3>完全圆锥型 NAT <span class="en">Full Cone NAT / 全锥型</span></h3>
+        <div style="color:var(--muted);font-size:13px">一个内网 socket ⇒ 一个固定公网端口，任何外部主机都能访问它</div>
+      </div>
+      <div class="sec-tag">安全性：★☆☆☆（最低）</div>
+    </div>
+
+    <div class="stage">
+      <div class="topo">
+        <div class="col inner">
+          <div class="zone-title">内网 / LAN</div>
+          <div class="node" id="n-in-0">
+            <span class="tagline">发起方</span>
+            <div class="name">内网主机 A</div>
+            <div class="addr">192.168.1.10 : 5000</div>
+          </div>
+        </div>
+        <div class="nat-box">
+          <div class="router">NAT<small>路由器</small></div>
+        </div>
+        <div class="col outer">
+          <div class="zone-title">公网 / Internet</div>
+          <div class="node" id="n-out-0a">
+            <div class="name">外部主机 X</div>
+            <div class="addr">203.0.113.1 : 9000</div>
+          </div>
+          <div class="node" id="n-out-0b">
+            <span class="tagline">从未被联系</span>
+            <div class="name">外部主机 Z</div>
+            <div class="addr">198.51.100.7 : 7777</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="maptable">
+        <div class="cap">NAT 映射表</div>
+        <table>
+          <thead><tr><th>内网地址</th><th>公网映射</th><th>过滤规则</th></tr></thead>
+          <tbody id="map-0">
+            <tr class="row-real"><td class="in">192.168.1.10:5000</td><td class="pub">203.0.113.50:62000</td><td>任意外部主机 → 均放行</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panels">
+      <div class="pbox">
+        <h4>映射规则</h4>
+        <ul>
+          <li>内网主机建立 socket <span class="k">(LocalIP:LocalPort)</span></li>
+          <li>第一次向外部发送数据时，NAT 分配一个公网映射 <b>(PublicIP:PublicPort)</b></li>
+          <li>以后用这个 socket 向<b>任何</b>外部主机发送，都使用同一对映射</li>
+        </ul>
+      </div>
+      <div class="pbox">
+        <h4>过滤规则</h4>
+        <ul>
+          <li>任何外部主机只要知道 <b>(PublicIP:PublicPort)</b></li>
+          <li>就可以发数据给该公网地址，内网主机即可收到</li>
+          <li>无需内网主机先前联系过对方 ✔</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="lab">
+      <div class="lab-head">
+        <h4>交互演示</h4>
+        <span class="hint">观察：先让 A → X 建立映射，再让从未被联系的 Z 主动打进来。</span>
+      </div>
+      <div class="controls">
+        <button class="btn primary" data-act="send-x">A → X 发送</button>
+        <button class="btn primary" data-act="send-z">A → Z 发送</button>
+        <button class="btn primary" data-act="in-x">X 主动发往公网映射</button>
+        <button class="btn primary" data-act="in-z">Z 主动发往公网映射</button>
+        <button class="btn ghost" data-act="reset">重置</button>
+      </div>
+      <div class="log" data-log="0"></div>
+    </div>
+  </section>
+
+  <!-- ============ 卡片 2 ============ -->
+  <section class="nat-card" data-card="1">
+    <div class="nat-head">
+      <div class="badge">②</div>
+      <div>
+        <h3>地址限制圆锥型 NAT <span class="en">Restricted Cone NAT</span></h3>
+        <div style="color:var(--muted);font-size:13px">必须曾向对方 IP 发过数据，对方才能回打 —— 但端口不限</div>
+      </div>
+      <div class="sec-tag">安全性：★★☆☆</div>
+    </div>
+
+    <div class="stage">
+      <div class="topo">
+        <div class="col inner">
+          <div class="zone-title">内网 / LAN</div>
+          <div class="node">
+            <span class="tagline">发起方</span>
+            <div class="name">内网主机 A</div>
+            <div class="addr">192.168.1.10 : 5000</div>
+          </div>
+        </div>
+        <div class="nat-box"><div class="router">NAT<small>路由器</small></div></div>
+        <div class="col outer">
+          <div class="zone-title">公网 / Internet</div>
+          <div class="node" id="n-out-1a">
+            <div class="name">外部主机 X</div>
+            <div class="addr">203.0.113.1 : 9000</div>
+          </div>
+          <div class="node" id="n-out-1b">
+            <div class="name">外部主机 Z</div>
+            <div class="addr">198.51.100.7 : 7777</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="maptable">
+        <div class="cap">NAT 过滤表（白名单按 IP）</div>
+        <table>
+          <thead><tr><th>公网映射</th><th>允许进入的源 IP</th><th>允许的源端口</th></tr></thead>
+          <tbody id="map-1">
+            <tr><td class="pub">203.0.113.50:62000</td><td class="out">203.0.113.1</td><td>任意端口</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panels">
+      <div class="pbox">
+        <h4>映射规则</h4>
+        <ul>
+          <li>与全锥型相同：一个 socket 复用同一个公网 <b>(PublicIP:PublicPort)</b></li>
+          <li>向任何外部主机发送都使用这对映射</li>
+        </ul>
+      </div>
+      <div class="pbox">
+        <h4>过滤规则</h4>
+        <ul>
+          <li>外部主机要打进来，需要满足两个条件：</li>
+          <li>① 知道 <b>(PublicIP:PublicPort)</b></li>
+          <li>② 内网主机曾用该 socket 向<b>这个外部 IP</b> 发过数据</li>
+          <li>满足后，对方可用自己的 <b>(IP, 任意端口)</b> 发送，内网即可收到</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="lab">
+      <div class="lab-head">
+        <h4>交互演示</h4>
+        <span class="hint">联系过 X 的 IP 后，X 换一个端口也能打进来；但 Z 的 IP 从未被联系则被丢弃。</span>
+      </div>
+      <div class="controls">
+        <button class="btn primary" data-act="send-x">A → X(IP) 发送</button>
+        <button class="btn primary" data-act="in-x">X 用原端口打回</button>
+        <button class="btn primary" data-act="in-x-alt">X 换端口打回</button>
+        <button class="btn primary" data-act="in-z">Z 主动打回</button>
+        <button class="btn ghost" data-act="reset">重置</button>
+      </div>
+      <div class="log" data-log="1"></div>
+    </div>
+  </section>
+
+  <!-- ============ 卡片 3 ============ -->
+  <section class="nat-card" data-card="2">
+    <div class="nat-head">
+      <div class="badge">③</div>
+      <div>
+        <h3>端口限制圆锥型 NAT <span class="en">Port Restricted Cone NAT</span></h3>
+        <div style="color:var(--muted);font-size:13px">不仅要 IP 相符，端口也必须精确匹配 —— 最常见的家用 NAT</div>
+      </div>
+      <div class="sec-tag">安全性：★★★☆</div>
+    </div>
+
+    <div class="stage">
+      <div class="topo">
+        <div class="col inner">
+          <div class="zone-title">内网 / LAN</div>
+          <div class="node">
+            <span class="tagline">发起方</span>
+            <div class="name">内网主机 A</div>
+            <div class="addr">192.168.1.10 : 5000</div>
+          </div>
+        </div>
+        <div class="nat-box"><div class="router">NAT<small>路由器</small></div></div>
+        <div class="col outer">
+          <div class="zone-title">公网 / Internet</div>
+          <div class="node" id="n-out-2a">
+            <div class="name">外部主机 X</div>
+            <div class="addr">203.0.113.1 : 9000</div>
+          </div>
+          <div class="node" id="n-out-2b">
+            <div class="name">外部主机 Z</div>
+            <div class="addr">198.51.100.7 : 7777</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="maptable">
+        <div class="cap">NAT 过滤表（白名单按 IP + 端口）</div>
+        <table>
+          <thead><tr><th>公网映射</th><th>允许进入的源 IP</th><th>允许的源端口</th></tr></thead>
+          <tbody id="map-2">
+            <tr><td class="pub">203.0.113.50:62000</td><td class="out">203.0.113.1</td><td class="out">9000</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panels">
+      <div class="pbox">
+        <h4>映射规则</h4>
+        <ul>
+          <li>仍是端点无关（Endpoint-Independent Mapping）</li>
+          <li>同一 socket 复用一个公网 <b>(PublicIP:PublicPort)</b></li>
+        </ul>
+      </div>
+      <div class="pbox">
+        <h4>过滤规则</h4>
+        <ul>
+          <li>① 知道 <b>(PublicIP:PublicPort)</b></li>
+          <li>② 内网主机曾向<b>这个外部 (IP, Port)</b> 发过数据</li>
+          <li>两者同时满足，对方才能用<b>相同的 (IP,Port)</b> 发进来</li>
+          <li>换了端口即使 IP 相同，也会被丢弃 ✘</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="lab">
+      <div class="lab-head">
+        <h4>交互演示</h4>
+        <span class="hint">A 向 X:9000 发送后，只有 X:9000 能打回；X 换端口或 Z 打回均失败。</span>
+      </div>
+      <div class="controls">
+        <button class="btn primary" data-act="send-x">A → X:9000 发送</button>
+        <button class="btn primary" data-act="in-x">X:9000 打回</button>
+        <button class="btn primary" data-act="in-x-alt">X 换端口打回</button>
+        <button class="btn primary" data-act="in-z">Z 主动打回</button>
+        <button class="btn ghost" data-act="reset">重置</button>
+      </div>
+      <div class="log" data-log="2"></div>
+    </div>
+  </section>
+
+  <!-- ============ 卡片 4 ============ -->
+  <section class="nat-card" data-card="3">
+    <div class="nat-head">
+      <div class="badge">④</div>
+      <div>
+        <h3>对称型 NAT <span class="en">Symmetric NAT</span></h3>
+        <div style="color:var(--muted);font-size:13px">每个「目标 IP:Port」分配独立的公网端口，无法直接 UDP-P2P</div>
+      </div>
+      <div class="sec-tag">安全性：★★★★（最高）</div>
+    </div>
+
+    <div class="stage">
+      <div class="topo">
+        <div class="col inner">
+          <div class="zone-title">内网 / LAN</div>
+          <div class="node">
+            <span class="tagline">发起方</span>
+            <div class="name">内网主机 A</div>
+            <div class="addr">192.168.1.10 : 5000</div>
+          </div>
+        </div>
+        <div class="nat-box"><div class="router">NAT<small>路由器</small></div></div>
+        <div class="col outer">
+          <div class="zone-title">公网 / Internet</div>
+          <div class="node" id="n-out-3a">
+            <div class="name">外部主机 1 / X</div>
+            <div class="addr">203.0.113.1 : 9000</div>
+          </div>
+          <div class="node" id="n-out-3b">
+            <div class="name">外部主机 2 / Z</div>
+            <div class="addr">198.51.100.7 : 7777</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="maptable">
+        <div class="cap">NAT 映射表（按目标端点分别映射）</div>
+        <table>
+          <thead><tr><th>内网地址</th><th>目标 (外部 IP:Port)</th><th>分配的公网映射</th></tr></thead>
+          <tbody id="map-3">
+            <tr><td class="in">192.168.1.10:5000</td><td class="out">203.0.113.1:9000</td><td class="pub">203.0.113.50:62000</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="panels">
+      <div class="pbox">
+        <h4>映射规则</h4>
+        <ul>
+          <li>同一个 socket 发往<b>不同目标</b>，会得到<b>不同的公网映射</b></li>
+          <li>发往外部主机 1 → 固定用 <b>(PublicIP-1, Port-1)</b></li>
+          <li>发往外部主机 2 → 固定用 <b>(PublicIP-2, Port-2)</b></li>
+          <li>若只有一个公网 IP，则 <b>Port-1 ≠ Port-2</b>（端点相关映射）</li>
+        </ul>
+      </div>
+      <div class="pbox">
+        <h4>过滤规则</h4>
+        <ul>
+          <li>外部主机必须<b>先收到</b>内网主机发给它的数据，才能回传</li>
+          <li>否则即使知道某个 <b>(PublicIP,Port)</b> 也无法发送</li>
+          <li>这种 NAT <b>无法实现 UDP-P2P 直接通信</b></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="lab">
+      <div class="lab-head">
+        <h4>交互演示</h4>
+        <span class="hint">同一 socket 联系两个目标 → 生成两个不同公网端口，第三方用其中一个端口打进来往往失败。</span>
+      </div>
+      <div class="controls">
+        <button class="btn primary" data-act="send-x">A → 外部主机1 发送</button>
+        <button class="btn primary" data-act="send-z">A → 外部主机2 发送</button>
+        <button class="btn primary" data-act="in-x">外部主机1 打回</button>
+        <button class="btn primary" data-act="in-z">外部主机2 打回</button>
+        <button class="btn primary" data-act="peer-probe">第三方探针打 Port-1</button>
+        <button class="btn ghost" data-act="reset">重置</button>
+      </div>
+      <div class="log" data-log="3"></div>
+    </div>
+  </section>
+
+  <!-- ============ 穿透矩阵 ============ -->
+  <div class="matrix-wrap">
+    <h2>不同 NAT 之间的 UDP 穿透属性</h2>
+    <p class="desc">
+      「对称 NAT 无法穿透」的说法并不准确。对称 NAT 与 Full Cone、对称 NAT 与 IP 受限 Cone 之间是可以穿透的；
+      而对称 NAT 与端口受限、对称 NAT 与对称 NAT 之间不可穿透。
+    </p>
+
+    <table class="matrix" id="matrix">
+      <thead>
+        <tr>
+          <th></th>
+          <th>① 全锥</th><th>② IP 受限</th><th>③ 端口受限</th><th>④ 对称</th>
+        </tr>
+      </thead>
+      <tbody></tbody>
+    </table>
+
+    <div class="legend">
+      <span><i class="dot yes"></i> 可穿透</span>
+      <span><i class="dot no"></i> 不可穿透</span>
+      <span>（对角线：两台主机各自处于同一种 NAT 之后）</span>
+    </div>
+  </div>
+
+  <div class="rulebar">
+    <b>序号相加判定法：</b>把四种类型按序列号标定，若两类型序号之和 <b>N ≤ 6</b> 则可穿透。
+    <div class="seq">
+      <i>① 全锥 = <b>1</b></i>
+      <i>② IP 受限 = <b>2</b></i>
+      <i>③ 端口受限 = <b>3</b></i>
+      <i>④ 对称 = <b>4</b></i>
+    </div>
+    示例：② + ④ = 6 → 可穿透；③ + ④ = 7 → 不可穿透。<br>
+    安全性系数排序：<b>对称型 &gt; 端口受限锥型 &gt; 受限锥型 &gt; 全锥型</b>。
+  </div>
+
+</div>
+
+<footer>
+  可视化说明 · 参考 CSDN 博主「wellnw」原文
+  <a href="https://blog.csdn.net/wgl307293845/article/details/120450626" target="_blank" rel="noopener">《NAT类型与穿透》</a>
+</footer>
+
+<script>
+/* =====================================================================
+   四种 NAT 的模拟模型
+   ===================================================================== */
+const TYPES = [
+  { id: 1, key: 'full', name: '全锥型' },
+  { id: 2, key: 'restricted', name: 'IP 受限' },
+  { id: 3, key: 'port', name: '端口受限' },
+  { id: 4, key: 'sym', name: '对称' }
+];
+
+/* 每个演示的独立状态 */
+function makeState(card) {
+  return {
+    card,
+    mapped: false,        // 是否已建立对外映射
+    // 全锥/受限/端口受限：单一映射
+    pubPort: '62000',
+    // 白名单：允许进入的端点
+    allowed: [],          // {ip, port}  port:'*' 表示任意端口
+    // 对称：{ 'targetIp:targetPort': { pubIp, pubPort } }
+    symTable: {},
+    symSeq: [62000, 62001],
+    sentTargets: [],      // 对称：已联系过的目标
+    nextSymIdx: 0
+  };
+}
+const states = {};
+let logSeq = 0;
+
+/* ---------- DOM helpers ---------- */
+const $  = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+
+function clearLog(card) {
+  const el = $(`.log[data-log="${card}"]`);
+  if (el) { el.innerHTML = ''; logSeq = 0; }
+}
+function log(card, text, cls = '') {
+  const el = $(`.log[data-log="${card}"]`);
+  if (!el) return;
+  const d = document.createElement('div');
+  d.className = 'l-' + (cls || 'dim');
+  d.textContent = (++logSeq).toString().padStart(2, '0') + '  ' + text;
+  el.appendChild(d);
+  el.scrollTop = el.scrollHeight;
+}
+
+/* 行闪烁 */
+function flashRow(card, index) {
+  const tbody = $(`#map-${card}`);
+  if (!tbody) return;
+  const rows = tbody.querySelectorAll('tr');
+  const row = rows[index !== undefined ? index : rows.length - 1];
+  if (!row) return;
+  row.classList.remove('row-anim');
+  void row.offsetWidth;
+  row.classList.add('row-anim');
+}
+
+/* 节点高亮 */
+function pulse(sel) {
+  const el = $(sel);
+  if (!el) return;
+  el.style.transition = 'box-shadow .2s, transform .2s';
+  el.style.boxShadow = '0 0 0 2px #58a6ff, 0 0 26px -4px #58a6ff';
+  el.style.transform = 'translateY(-2px)';
+  setTimeout(() => { el.style.boxShadow = ''; el.style.transform = ''; }, 650);
+}
+
+/* ---------- 渲染映射表 ---------- */
+function renderMaps(card) {
+  const s = states[card];
+  const tbody = $(`#map-${card}`);
+  if (!tbody) return;
+  const LAN = '192.168.1.10:5000';
+
+  if (card >= 0 && card <= 2) {
+    tbody.innerHTML = '';
+    if (!s.mapped) {
+      tbody.innerHTML = `<tr><td colspan="3" style="color:var(--muted);font-style:italic">尚未建立映射 —— 请先让内网主机主动发送数据…</td></tr>`;
+      return;
+    }
+    if (card === 0) {
+      tbody.innerHTML =
+        `<tr><td class="in">${LAN}</td><td class="pub">203.0.113.50:${s.pubPort}</td><td style="color:var(--ok)">任意外部主机 → 均放行</td></tr>`;
+    } else if (card === 1) {
+      let allow = s.allowed.length
+        ? s.allowed.map(a => `<span style="color:var(--outer)">${a.ip}</span>`).join('、')
+        : `<span style="color:var(--muted)">（空）</span>`;
+      tbody.innerHTML =
+        `<tr><td class="pub">203.0.113.50:${s.pubPort}</td><td>${allow}</td><td style="color:var(--muted)">任意端口</td></tr>`;
+    } else {
+      let allow = s.allowed.length
+        ? s.allowed.map(a => `<span style="color:var(--outer)">${a.ip}:${a.port}</span>`).join('、')
+        : `<span style="color:var(--muted)">（空）</span>`;
+      tbody.innerHTML =
+        `<tr><td class="pub">203.0.113.50:${s.pubPort}</td><td colspan="2">允许进入：${allow}</td></tr>`;
+    }
+  }
+
+  if (card === 3) {
+    tbody.innerHTML = '';
+    const keys = Object.keys(s.symTable);
+    if (!keys.length) {
+      tbody.innerHTML = `<tr><td colspan="3" style="color:var(--muted);font-style:italic">尚未建立映射 —— 请分别向两个外部主机发送数据…</td></tr>`;
+      return;
+    }
+    keys.forEach(k => {
+      const m = s.symTable[k];
+      tbody.insertAdjacentHTML('beforeend',
+        `<tr><td class="in">${LAN}</td><td class="out">${k}</td><td class="pub">${m.pubIp}:${m.pubPort}</td></tr>`);
+    });
+  }
+}
+
+/* ---------- 数据包飞行动画 ---------- */
+function stageOf(card) {
+  const sec = document.querySelector(`.nat-card[data-card="${card}"] .stage`);
+  if (!sec) return null;
+  let wrap = sec.querySelector('.flywrap');
+  if (!wrap) {
+    wrap = document.createElement('div');
+    wrap.className = 'flywrap';
+    sec.appendChild(wrap);
+  }
+  return { stage: sec, wrap };
+}
+
+function centerIn(container, el) {
+  const c = container.getBoundingClientRect();
+  const r = el.getBoundingClientRect();
+  return { x: r.left - c.left + r.width / 2, y: r.top - c.top + r.height / 2 };
+}
+
+/* 让一个数据包从 A 点飞到 B 点，返回 Promise */
+function flyPacket(card, fromEl, toEl, label, cls) {
+  return new Promise(resolve => {
+    const s = stageOf(card);
+    if (!s || !fromEl || !toEl) return resolve();
+    const a = centerIn(s.stage, fromEl);
+    const b = centerIn(s.stage, toEl);
+    const p = document.createElement('div');
+    p.className = 'packet ' + (cls || '');
+    p.textContent = label;
+    p.style.left = a.x + 'px';
+    p.style.top  = a.y + 'px';
+    p.style.transform = 'translate(-50%,-50%)';
+    s.wrap.appendChild(p);
+
+    // 路由器闪烁
+    const router = document.querySelector(`.nat-card[data-card="${card}"] .router`);
+    const dur = 720;
+    router && router.classList.add('working');
+
+    const start = performance.now();
+    function tick(now) {
+      const t = Math.min(1, (now - start) / dur);
+      const e = t < .5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+      const x = a.x + (b.x - a.x) * e;
+      const y = a.y + (b.y - a.y) * e - Math.sin(Math.PI * t) * 26;
+      p.style.left = x + 'px';
+      p.style.top  = y + 'px';
+      if (t < 1) requestAnimationFrame(tick);
+      else {
+        p.remove();
+        router && router.classList.remove('working');
+        resolve();
+      }
+    }
+    requestAnimationFrame(tick);
+  });
+}
+
+/* 在指定元素处冒出涟漪 */
+function rippleAt(card, el, color) {
+  const s = stageOf(card);
+  if (!s || !el) return;
+  const c = centerIn(s.stage, el);
+  const r = document.createElement('div');
+  r.className = 'ripple';
+  r.style.left = c.x + 'px';
+  r.style.top = c.y + 'px';
+  r.style.color = color || '#3fb950';
+  s.wrap.appendChild(r);
+  setTimeout(() => r.remove(), 650);
+}
+
+/* 在 NAT 路由器处显示丢弃的 ✘ */
+function dropAt(card) {
+  const s = stageOf(card);
+  if (!s) return;
+  const router = document.querySelector(`.nat-card[data-card="${card}"] .router`);
+  if (!router) return;
+  const c = centerIn(s.stage, router);
+  const p = document.createElement('div');
+  p.className = 'poof';
+  p.textContent = '✘';
+  p.style.left = c.x + 'px';
+  p.style.top = c.y + 'px';
+  s.wrap.appendChild(p);
+  setTimeout(() => p.remove(), 850);
+}
+
+/* ---------- 各动作 ---------- */
+const TARGETS = {
+  X: { ip: '203.0.113.1',  port: '9000' },
+  Z: { ip: '198.51.100.7', port: '7777' }
+};
+
+function ensureMapped(card, target) {
+  const s = states[card];
+  if (card === 0) {
+    if (!s.mapped) { s.mapped = true; log(card, 'NAT 分配公网映射 203.0.113.50:' + s.pubPort + ' （此后所有目标共用）', 'nat'); }
+  } else if (card === 1) {
+    if (!s.mapped) { s.mapped = true; log(card, 'NAT 分配公网映射 203.0.113.50:' + s.pubPort, 'nat'); }
+    if (!s.allowed.some(a => a.ip === target.ip)) {
+      s.allowed.push({ ip: target.ip, port: '*' });
+      log(card, '过滤白名单 + IP ' + target.ip + '（端口不限）', 'nat');
+    }
+  } else if (card === 2) {
+    if (!s.mapped) { s.mapped = true; log(card, 'NAT 分配公网映射 203.0.113.50:' + s.pubPort, 'nat'); }
+    const exists = s.allowed.some(a => a.ip === target.ip && a.port === target.port);
+    if (!exists) {
+      s.allowed.push({ ip: target.ip, port: target.port });
+      log(card, '过滤白名单 + ' + target.ip + ':' + target.port, 'nat');
+    }
+  } else if (card === 3) {
+    const key = target.ip + ':' + target.port;
+    if (!s.symTable[key]) {
+      const port = s.symSeq[s.nextSymIdx++ % s.symSeq.length];
+      s.symTable[key] = { pubIp: '203.0.113.50', pubPort: port };
+      log(card, '目标 ' + key + ' → 新映射 203.0.113.50:' + port + '（端点相关）', 'nat');
+    }
+  }
+}
+
+/* 判断入站是否放行 */
+function inboundAllowed(card, src) {
+  const s = states[card];
+  if (card === 0) {
+    return s.mapped ? { ok: true, why: '全锥：约任意来源均放行' }
+                    : { ok: false, why: '尚无映射，无对应条目' };
+  }
+  if (card === 1) {
+    if (!s.mapped) return { ok: false, why: '尚无映射' };
+    const ok = s.allowed.some(a => a.ip === src.ip);
+    return ok ? { ok: true, why: 'IP ' + src.ip + ' 在白名单（端口不限）' }
+              : { ok: false, why: 'IP ' + src.ip + ' 从未被联系，被过滤' };
+  }
+  if (card === 2) {
+    if (!s.mapped) return { ok: false, why: '尚无映射' };
+    const ok = s.allowed.some(a => a.ip === src.ip && a.port === src.port);
+    return ok ? { ok: true, why: src.ip + ':' + src.port + ' 精确匹配白名单' }
+              : { ok: false, why: src.ip + ':' + src.port + ' 不匹配已联系端点（端口受限）' };
+  }
+  if (card === 3) {
+    const key = src.ip + ':' + src.port;
+    if (s.symTable[key]) return { ok: true, why: '该目标曾收到我们的数据，允许回传' };
+    // 第三方用别的端口：只有曾联系过该 IP 且确实映射过才可能
+    return { ok: false, why: '对称 NAT：' + key + ' 未曾作为目标，无映射/无放行条目' };
+  }
+  return { ok: false, why: '未知' };
+}
+
+/* 主分发 */
+function act(card, action) {
+  const s = states[card];
+
+  if (action === 'reset') {
+    states[card] = makeState(card);
+    clearLog(card);
+    renderMaps(card);
+    log(card, '状态已重置。', 'dim');
+    return;
+  }
+
+  if (action === 'send-x' || action === 'send-z') {
+    const t = action === 'send-x' ? TARGETS.X : TARGETS.Z;
+    log(card, `内网 192.168.1.10:5000 → 外部 ${t.ip}:${t.port}  发送数据`, 'send');
+    const inEl = document.querySelector('.nat-card[data-card="' + card + '"] .col.inner .node');
+    const outEl = card < 3
+      ? document.querySelector('#n-out-' + card + (action === 'send-x' ? 'a' : 'b'))
+      : document.querySelector('#n-out-3' + (action === 'send-x' ? 'a' : 'b'));
+    // 先到 NAT，再到目标
+    flyPacket(card, inEl, document.querySelector('.nat-card[data-card="' + card + '"] .router'), 'DATA', 'in')
+      .then(() => {
+        ensureMapped(card, t);
+        renderMaps(card);
+        flashRow(card);
+        return flyPacket(card, document.querySelector('.nat-card[data-card="' + card + '"] .router'), outEl, 'PUB', 'pub');
+      })
+      .then(() => { pulse('#n-out-' + (card < 3 ? card : '3') + (action === 'send-x' ? 'a' : 'b')); });
+    return;
+  }
+
+  if (action === 'in-x')        return doInbound(card, TARGETS.X);
+  if (action === 'in-z')        return doInbound(card, TARGETS.Z);
+  if (action === 'in-x-alt')    return doInbound(card, { ip: TARGETS.X.ip, port: '8888', alt: true });
+  if (action === 'peer-probe') {
+    log(card, '第三方探针 198.51.100.99:12345 → 尝试访问 203.0.113.50:62000', 'send');
+    const r = inboundAllowed(card, { ip: '198.51.100.99', port: '12345' });
+    if (r.ok) log(card, '✔ 收到：' + r.why, 'ok');
+    else { dropAt(card); log(card, '✘ 丢弃：' + r.why, 'no'); }
+    return;
+  }
+}
+
+function doInbound(card, src) {
+  const label = src.ip + ':' + src.port + (src.alt ? '（换了端口）' : '');
+  log(card, `外部 ${label} → 公网映射 主动发数据`, 'send');
+  const r = inboundAllowed(card, src);
+
+  const outEl = src.alt
+    ? document.querySelector('#n-out-' + (card < 3 ? card : '3') + 'a')
+    : (src.port === TARGETS.Z.port
+        ? document.querySelector('#n-out-' + (card < 3 ? card : '3') + 'b')
+        : document.querySelector('#n-out-' + (card < 3 ? card : '3') + 'a'));
+  const routerEl = document.querySelector('.nat-card[data-card="' + card + '"] .router');
+  const inEl = document.querySelector('.nat-card[data-card="' + card + '"] .col.inner .node');
+
+  if (r.ok) {
+    // 外部 → NAT → 内网
+    flyPacket(card, outEl, routerEl, 'IN', '')
+      .then(() => flyPacket(card, routerEl, inEl, 'IN', 'in'))
+      .then(() => {
+        rippleAt(card, inEl, '#3fb950');
+        log(card, '✔ 内网主机收到数据包 —— ' + r.why, 'ok');
+        pulse('.col.inner .node');
+      });
+  } else {
+    // 外部 → NAT，到路由器处被丢
+    flyPacket(card, outEl, routerEl, 'IN', '')
+      .then(() => {
+        dropAt(card);
+        log(card, '✘ 数据包被 NAT 丢弃 —— ' + r.why, 'no');
+      });
+  }
+}
+
+/* ---------- Tab 切换 ---------- */
+$$('#tabs button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $$('#tabs button').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    const t = btn.dataset.t;
+    $$('.nat-card').forEach(c => c.classList.toggle('show', c.dataset.card === t));
+  });
+});
+
+/* ---------- 绑定按钮 ---------- */
+$$('.nat-card').forEach(card => {
+  const id = Number(card.dataset.card);
+  states[id] = makeState(id);
+  renderMaps(id);
+  card.querySelectorAll('button[data-act]').forEach(b => {
+    b.addEventListener('click', () => act(id, b.dataset.act));
+  });
+  clearLog(id);
+});
+
+/* =====================================================================
+   穿透矩阵生成
+   规则：序号相加 N <= 6 可穿透
+   ① 全锥=1  ② IP受限=2  ③ 端口受限=3  ④ 对称=4
+   特例：对称(4) 与 端口受限(3) = 7 ✘；对称与对称 = 8 ✘
+   ===================================================================== */
+(function buildMatrix() {
+  const tbody = $('#matrix tbody');
+  const N = TYPES.map(t => t.id);
+  N.forEach((ri, i) => {
+    const tr = document.createElement('tr');
+    const th = document.createElement('th');
+    th.textContent = TYPES[i].name + ' (' + ri + ')';
+    th.style.textAlign = 'right';
+    th.style.paddingRight = '12px';
+    th.style.whiteSpace = 'nowrap';
+    tr.appendChild(th);
+
+    N.forEach((ci, j) => {
+      const td = document.createElement('td');
+      const div = document.createElement('div');
+      div.className = 'cell';
+      const sum = ri + ci;
+      const isSymPort = (ri === 4 && ci === 3) || (ri === 3 && ci === 4);
+
+      if (i === j) {
+        // 对角线：两个不同主机，各自处于同一种 NAT 后面互相连接
+        if (ri === 4) {
+          div.className += ' no';
+          div.innerHTML = '✘ 不可穿透<small>对称+对称 · 和=8</small>';
+        } else {
+          div.className += ' yes';
+          div.innerHTML = '✔ 可穿透<small>同类两台主机 · 和=' + sum + '</small>';
+        }
+      } else if (isSymPort) {
+        div.className += ' no';
+        div.innerHTML = '✘ 不可穿透<small>和=7</small>';
+      } else if (sum <= 6) {
+        div.className += ' yes';
+        div.innerHTML = '✔ 可穿透<small>和=' + sum + '</small>';
+      } else {
+        div.className += ' no';
+        div.innerHTML = '✘ 不可穿透<small>和=' + sum + '</small>';
+      }
+      td.appendChild(div);
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+})();
+</script>
+</body>
+</html>
